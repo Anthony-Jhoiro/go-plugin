@@ -97,6 +97,8 @@ type ServeConfig struct {
 	//   * Connection information will not be sent to stdout
 	//
 	Test *ServeTestConfig
+
+	Listener net.Listener
 }
 
 // ServeTestConfig configures plugin serving for test mode. See ServeConfig.Test.
@@ -219,6 +221,7 @@ func protocolVersion(opts *ServeConfig) (int, Protocol, PluginSet) {
 //
 // This is the method that plugins should call in their main() functions.
 func Serve(opts *ServeConfig) {
+	var err error
 	exitCode := -1
 	// We use this to trigger an `os.Exit` so that we can execute our other
 	// deferred functions. In test mode, we just output the err to stderr
@@ -270,10 +273,14 @@ func Serve(opts *ServeConfig) {
 	}
 
 	// Register a listener so we can accept a connection
-	listener, err := serverListener()
-	if err != nil {
-		logger.Error("plugin init error", "error", err)
-		return
+
+	listener := opts.Listener
+	if listener == nil {
+		listener, err = serverListener()
+		if err != nil {
+			logger.Error("plugin init error", "error", err)
+			return
+		}
 	}
 
 	// Close the listener on return. We wrap this in a func() on purpose
