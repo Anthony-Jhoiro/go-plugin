@@ -281,16 +281,11 @@ func newGRPCBroker(s streamer, tls *tls.Config) *GRPCBroker {
 	}
 }
 
-// Accept accepts a connection by ID.
+// AcceptWithCustomListener accepts a connection by ID with a specific listener.
 //
 // This should not be called multiple times with the same ID at one time.
-func (b *GRPCBroker) Accept(id uint32) (net.Listener, error) {
-	listener, err := serverListener()
-	if err != nil {
-		return nil, err
-	}
-
-	err = b.streamer.Send(&plugin.ConnInfo{
+func (b *GRPCBroker) AcceptWithCustomListener(id uint32, listener net.Listener) (net.Listener, error) {
+	err := b.streamer.Send(&plugin.ConnInfo{
 		ServiceId: id,
 		Network:   listener.Addr().Network(),
 		Address:   listener.Addr().String(),
@@ -302,19 +297,35 @@ func (b *GRPCBroker) Accept(id uint32) (net.Listener, error) {
 	return listener, nil
 }
 
-// AcceptAndServe is used to accept a specific stream ID and immediately
-// serve a gRPC server on that stream ID. This is used to easily serve
-// complex arguments. Each AcceptAndServe call opens a new listener socket and
-// sends the connection info down the stream to the dialer. Since a new
-// connection is opened every call, these calls should be used sparingly.
-// Multiple gRPC server implementations can be registered to a single
-// AcceptAndServe call.
+// Accept accepts a connection by ID.
+//
+// This should not be called multiple times with the same ID at one time.
+func (b *GRPCBroker) Accept(id uint32) (net.Listener, error) {
+	listener, err := serverListener()
+	if err != nil {
+		return nil, err
+	}
+
+	return b.AcceptWithCustomListener(id, listener)
+}
+
 func (b *GRPCBroker) AcceptAndServe(id uint32, s func([]grpc.ServerOption) *grpc.Server) {
 	listener, err := b.Accept(id)
 	if err != nil {
 		log.Printf("[ERR] plugin: plugin acceptAndServe error: %s", err)
 		return
 	}
+	b.AcceptAndServeWithCustomListener(id, s, listener)
+}
+
+// AcceptAndServeWithCustomListener is used to accept a specific stream ID and immediately
+// serve a gRPC server on that stream ID and the specifies listener. This is used to easily serve
+// complex arguments. Each AcceptAndServe call opens a new listener socket and
+// sends the connection info down the stream to the dialer. Since a new
+// connection is opened every call, these calls should be used sparingly.
+// Multiple gRPC server implementations can be registered to a single
+// AcceptAndServe call.
+func (b *GRPCBroker) AcceptAndServeWithCustomListener(id uint32, s func([]grpc.ServerOption) *grpc.Server, listener net.Listener) {
 	defer listener.Close()
 
 	var opts []grpc.ServerOption
